@@ -1,0 +1,208 @@
+/*! Polymet Configurator - Squarespace Native Widget (no deps) */
+(function(){ 
+  const DEFAULTS = {
+    accent: '#111111',
+    endpoint: 'https://formspree.io/f/mnnzlpaw',
+    mailto: 'info@atelier7llc.com'
+  };
+
+  function fmt(n){ return new Intl.NumberFormat().format(Math.round(n/1000)*1000) }
+  function estimate(form){
+    const baseMap = { studio:120000, stacked:240000, cluster:800000, clinic:450000, lab:600000 };
+    const base = baseMap[form.solution] || 180000;
+    const modAdj = Math.max(1, form.modules * 0.85);
+    const finishAdj = { economy:0.9, standard:1.0, luxury:1.25 }[form.finish] || 1.0;
+    const pcmAdj = { none:1.0, 'pcm-walls':1.06, 'pcm-roof':1.04, 'pcm-both':1.1 }[form.pcm] || 1.0;
+    const low = base * modAdj * finishAdj * pcmAdj * 0.9;
+    const high = base * modAdj * finishAdj * pcmAdj * 1.15;
+    return { low, high };
+  }
+
+  function html(strings, ...vals){ return strings.map((s,i)=>s+(vals[i]||'')).join('') }
+
+  function render(container, opts){
+    const o = Object.assign({}, DEFAULTS, opts||{});
+
+    const form = {
+      solution: 'studio',
+      modules: 2,
+      finish: 'standard',
+      pcm: 'none',
+      location: '',
+      timeline: '3-6 months',
+      name: '',
+      email: '',
+      notes: ''
+    };
+
+    const root = document.createElement('div');
+    root.className = 'polymet-wrap';
+    root.innerHTML = html`
+      <style>.polymet-btn{background:${o.accent}}</style>
+      <h1 class="polymet-title">Container Configurator</h1>
+      <p class="polymet-sub">Choose a path, estimate a budget, and send it to our team.</p>
+
+      <div class="polymet-grid2">
+        <div>
+          <div class="polymet-label">Solution</div>
+          <select id="pm-solution" class="polymet-select">
+            <option value="studio">Single-Unit Studio (320–480 sf)</option>
+            <option value="stacked">Stacked Living (640–1,280 sf)</option>
+            <option value="cluster">Community Cluster</option>
+            <option value="clinic">Rapid Response Clinic</option>
+            <option value="lab">R&D / Specialty Lab</option>
+          </select>
+        </div>
+        <div>
+          <div class="polymet-label">Modules</div>
+          <input id="pm-modules" type="number" min="1" max="20" value="2" class="polymet-input" />
+        </div>
+      </div>
+
+      <div style="height:16px"></div>
+
+      <div class="polymet-grid3">
+        <div>
+          <div class="polymet-label">Finish Level</div>
+          <select id="pm-finish" class="polymet-select">
+            <option value="economy">Economy</option>
+            <option value="standard" selected>Standard</option>
+            <option value="luxury">Luxury</option>
+          </select>
+        </div>
+        <div>
+          <div class="polymet-label">PCM Option</div>
+          <select id="pm-pcm" class="polymet-select">
+            <option value="none">None</option>
+            <option value="pcm-walls">PCM Wall Panels</option>
+            <option value="pcm-roof">PCM Roof Panels</option>
+            <option value="pcm-both">PCM Walls + Roof</option>
+          </select>
+        </div>
+        <div>
+          <div class="polymet-label">Timeline</div>
+          <select id="pm-timeline" class="polymet-select">
+            <option>3-6 months</option>
+            <option>6-9 months</option>
+            <option>9-12 months</option>
+            <option>ASAP</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="height:16px"></div>
+
+      <div class="polymet-budget">
+        <h4>Estimated Budget</h4>
+        <div class="range" id="pm-range"></div>
+        <div class="hint">Range reflects scope/finish/PCM selections. Final pricing follows site + code review.</div>
+      </div>
+
+      <div style="height:16px"></div>
+
+      <div class="polymet-grid2">
+        <div>
+          <div class="polymet-label">Project Location</div>
+          <input id="pm-location" class="polymet-input" placeholder="City, State" />
+        </div>
+        <div>
+          <div class="polymet-label">Your Name</div>
+          <input id="pm-name" class="polymet-input" placeholder="Full name" required />
+        </div>
+        <div>
+          <div class="polymet-label">Email</div>
+          <input id="pm-email" type="email" class="polymet-input" placeholder="you@company.com" required />
+        </div>
+        <div>
+          <div class="polymet-label">Notes</div>
+          <textarea id="pm-notes" class="polymet-area" placeholder="Site constraints, goals, must-haves…"></textarea>
+        </div>
+      </div>
+
+      <div style="height:16px"></div>
+
+      <div class="polymet-row">
+        <button id="pm-send" class="polymet-btn">Send inquiry</button>
+        <a id="pm-mailto" class="polymet-ghost" href="mailto:info@atelier7llc.com">Email us</a>
+        <span id="pm-status" class="polymet-status"></span>
+      </div>
+    `;
+
+    function read(){
+      form.solution = document.getElementById('pm-solution').value;
+      form.modules = Math.max(1, Math.min(20, parseInt(document.getElementById('pm-modules').value||'2',10)||2));
+      form.finish = document.getElementById('pm-finish').value;
+      form.pcm = document.getElementById('pm-pcm').value;
+      form.timeline = document.getElementById('pm-timeline').value;
+      form.location = document.getElementById('pm-location').value;
+      form.name = document.getElementById('pm-name').value;
+      form.email = document.getElementById('pm-email').value;
+      form.notes = document.getElementById('pm-notes').value;
+    }
+
+    function updateBudget(){
+      read();
+      const rng = estimate(form);
+      document.getElementById('pm-range').textContent = '$' + fmt(rng.low) + ' – $' + fmt(rng.high);
+    }
+
+    root.addEventListener('input', updateBudget);
+    updateBudget();
+
+    document.getElementById('pm-mailto').href = 'mailto:' + (o.mailto||'info@atelier7llc.com');
+
+    document.getElementById('pm-send').addEventListener('click', async function(ev){
+      ev.preventDefault();
+      read();
+      const statusEl = document.getElementById('pm-status');
+      const btn = ev.currentTarget;
+      btn.disabled = true; statusEl.textContent='';
+
+      const rng = estimate(form);
+      const payload = {
+        name: form.name,
+        email: form.email,
+        location: form.location,
+        message: [
+          'Configurator Inquiry',
+          'Solution: ' + form.solution,
+          'Modules: ' + form.modules,
+          'Finish: ' + form.finish,
+          'PCM: ' + form.pcm,
+          'Timeline: ' + form.timeline,
+          'Est. Budget: $' + fmt(rng.low) + ' - $' + fmt(rng.high),
+          '',
+          'Notes:',
+          form.notes
+        ].join('\n')
+      };
+
+      const endpoint = o.endpoint || 'https://formspree.io/f/mnnzlpaw';
+      if (endpoint) {
+        try {
+          const res = await fetch(endpoint, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+          if (!res.ok) { const t = await res.text(); statusEl.textContent = 'Server responded ' + res.status + ': ' + t; }
+          else { statusEl.textContent = 'Sent! We’ll be in touch shortly.'; }
+        } catch(e) {
+          statusEl.textContent = (e && e.message) ? e.message : 'Network error';
+        } finally { btn.disabled = false; }
+      } else {
+        const subject = encodeURIComponent('New Configurator Inquiry');
+        const body = encodeURIComponent('Name: ' + payload.name + '\nEmail: ' + payload.email + '\nLocation: ' + payload.location + '\n\n' + payload.message);
+        window.location.href = 'mailto:' + (o.mailto||'info@atelier7llc.com') + '?subject=' + subject + '&body=' + body;
+        btn.disabled = false; statusEl.textContent = 'Opening your email client…';
+      }
+    });
+
+    container.innerHTML = '';
+    container.appendChild(root);
+  }
+
+  window.Polymet = window.Polymet || {
+    mount: function(selector, options){
+      var el = (typeof selector === 'string') ? document.querySelector(selector) : selector;
+      if(!el) return console.error('Polymet target not found:', selector);
+      render(el, options||{});
+    }
+  };
+})();
